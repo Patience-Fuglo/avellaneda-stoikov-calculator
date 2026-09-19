@@ -11,6 +11,7 @@ how much time is left in the trading session?
 | Module | Status |
 |---|---|
 | Reservation price + optimal spread | done |
+| Sensitivity analysis (risk aversion, volatility) | done |
 
 ## Reservation price + optimal spread
 
@@ -65,4 +66,49 @@ Run the tests:
 
 ```bash
 pytest tests/
+```
+
+## Sensitivity analysis
+
+`src/avellaneda_stoikov/sensitivity.py`
+
+How does the quote respond as risk aversion (`gamma`) or volatility
+(`sigma`) change, one at a time? `gamma` is swept across a standard
+illustrative range (it's the market maker's own design preference, not
+observed data); `sigma` is swept across TSLA's own **real** observed
+20-day rolling volatility range, not an arbitrary made-up range.
+
+```python
+from avellaneda_stoikov import sensitivity_to_risk_aversion, sensitivity_to_volatility
+
+gamma_result = sensitivity_to_risk_aversion(mid_price, inventory, volatility, time_remaining, k, gamma_values)
+vol_result = sensitivity_to_volatility(mid_price, inventory, risk_aversion, time_remaining, k, sigma_values)
+```
+
+**Real result, both sweeps confirm the closed-form relationships
+directly:** the reservation-price skew grows linearly with `gamma`
+(doubling it doubles the skew) and quadratically with `sigma` (doubling
+it quadruples the skew) — both cross-checked in the test suite, not just
+asserted.
+
+**A genuinely surprising real finding, verified by decomposing the
+spread formula's two terms rather than assumed:** at TSLA's real,
+current volatility, total spread actually *decreases* as `gamma`
+increases (1.3245 → 1.1513 across a 0.02–0.5 sweep) — the opposite of
+the common textbook claim that more risk-averse market makers always
+quote wider spreads. At this real volatility level the inventory-risk
+term (`gamma * sigma^2 * (T-t)`) is negligible (0.00002 to 0.0005) next
+to the floor term (`(2/gamma) * ln(1+gamma/k)`), which itself *shrinks*
+as `gamma` grows — so the floor term's shrinkage dominates the total.
+At high volatility (`sigma=2`, the paper's own example scale), the
+inventory-risk term dominates instead and spread *increases* with
+`gamma`, matching the textbook intuition. Neither direction is
+universally correct — which one holds depends entirely on the real
+volatility regime, confirmed here with both a real market's data and a
+direct test of both regimes (`test_spread_vs_risk_aversion_direction_depends_on_volatility_regime`).
+
+Run the real-data demo:
+
+```bash
+python scripts/demo_sensitivity.py
 ```

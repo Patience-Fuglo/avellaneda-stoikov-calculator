@@ -12,6 +12,7 @@ how much time is left in the trading session?
 |---|---|
 | Reservation price + optimal spread | done |
 | Sensitivity analysis (risk aversion, volatility) | done |
+| Almgren-Chriss optimal execution | done |
 
 ## Reservation price + optimal spread
 
@@ -111,4 +112,47 @@ Run the real-data demo:
 
 ```bash
 python scripts/demo_sensitivity.py
+```
+
+## Almgren-Chriss optimal execution
+
+`src/avellaneda_stoikov/execution.py`
+
+A natural extension once a market maker (or any trader) is holding a
+**large** position: how fast should it be liquidated? Trading too fast
+pushes the price against you (market impact); trading too slow leaves
+you exposed to the price drifting against you while you wait (risk
+exposure). The closed-form optimal holdings trajectory balances both,
+reusing the exact same risk-aversion idea (`gamma`) as the
+reservation-price model: more risk-averse means a faster, more
+front-loaded schedule to escape risk exposure sooner.
+
+```python
+from avellaneda_stoikov import optimal_execution_trajectory
+
+trajectory = optimal_execution_trajectory(
+    total_shares=5000, time_horizon=1.0, risk_aversion=5.0,
+    volatility=0.03234, temporary_impact=0.001, n_steps=10,
+)
+```
+
+As `gamma` (risk aversion) approaches 0, the schedule degenerates
+exactly to a straight-line TWAP (constant trading rate) — cross-checked
+directly in the test suite, not just asserted.
+
+**Real result:** liquidating the same real 5,000-share TSLA position
+used in the base quote demo, with real TSLA volatility (0.03234) as the
+risk input: a barely-risk-averse schedule sells almost exactly 50% by
+the halfway point (a near-perfect TWAP), while a highly-risk-averse
+schedule sells 71.1% by the same point — paying more in real impact cost
+to escape price-drift risk sooner. An earlier draft of this demo used a
+temporary-impact value that made the two schedules barely
+distinguishable (50.0% vs 50.3%) — a real, correct result, just not a
+useful teaching example, so the illustrative parameter was changed to
+show the model's real behavior clearly.
+
+Run the real-data demo:
+
+```bash
+python scripts/demo_execution.py
 ```
